@@ -1,0 +1,8 @@
+{
+    "mongoConnectionString": "mongodb://localhost:27017",
+    "databaseName": "golarm",
+    "collectionName": "scheduled",
+    "expireAfterSeconds": 86400,
+    "logName": "golarm",
+    "logBasePath": ""
+}

@@ -225,7 +225,13 @@ func main() {
 }
 
 func setupAndCheckStorage() {
-	client, err := mongo.NewClient(options.Client().ApplyURI(_config.MongoConnectionString))
+	connectionString := os.Getenv("MONGO_CONNECTION_STRING")
+	loggor.Info("Env variable MONGO_CONNECTION_STRING: " + connectionString)
+	if connectionString == "" {
+		connectionString = _config.MongoConnectionString
+		loggor.Info("Config connection string: " + connectionString)
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(connectionString))
 	if err != nil {
 		loggor.Error("Setting up Mongo connection: cannot create a client - " + err.Error())
 		return

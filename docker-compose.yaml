@@ -1,0 +1,27 @@
+version: '3'
+services:
+  golarm:
+    image: golarm:1.0
+    container_name: "golarm"
+    ports:
+      - "8787:8787"
+    environment: 
+      - MONGO_CONNECTION_STRING=mongodb://mongo:27017
+    depends_on:
+      - mongo
+    networks:
+      - "network1"
+  mongo:
+    image: mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - "mongodata:/data/db"
+    networks:
+      - "network1"
+
+volumes:
+   mongodata:
+
+networks:
+   network1:

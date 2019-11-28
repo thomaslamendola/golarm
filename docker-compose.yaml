@@ -1,7 +1,7 @@
 version: '3'
 services:
   golarm:
-    image: golarm:1.0
+    image: thomaslamendola/golarm:latest
     container_name: "golarm"
     ports:
       - "8787:8787"

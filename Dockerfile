@@ -1,20 +1,20 @@
-FROM golang:latest 
+FROM golang:latest AS builder
 
-LABEL version="1.0"
+WORKDIR /go/src/github.com/thomaslamendola/golarm/
 
-RUN mkdir /go/src/app
+RUN go get -d -v github.com/thomaslamendola/loggor
+RUN go get -d -v go.mongodb.org/mongo-driver/bson
+RUN go get -d -v go.mongodb.org/mongo-driver/mongo
 
-RUN go get -u github.com/thomaslamendola/loggor
-RUN go get -u go.mongodb.org/mongo-driver/bson
-RUN go get -u go.mongodb.org/mongo-driver/mongo
+COPY main.go .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app .
+COPY config.json .
 
-ADD ./main.go /go/src/app
-COPY ./config.json /go/src/app
+FROM alpine:latest  
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+COPY --from=builder /go/src/github.com/thomaslamendola/golarm/app .
+COPY --from=builder /go/src/github.com/thomaslamendola/golarm/config.json .
+CMD ["./app"] 
 
-WORKDIR /go/src/app 
-
-# RUN go test -v 
-RUN go build
-
-CMD ["./app"]
 EXPOSE 8787

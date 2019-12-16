@@ -29,7 +29,8 @@ var _m map[string]*time.Timer
 
 type echo struct {
 	ID                   string        `json:"id"`
-	Event                string        `json:"event"`
+	CallerName           string        `json:"callername"`
+	CombinedID           string        `json:"combinedid"`
 	URI                  string        `json:"uri"`
 	HostName             string        `json:"hostname"`
 	StartedAt            time.Time     `json:"startedat"`
@@ -70,15 +71,17 @@ func process(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 400)
 			return
 		}
-		if e.ID == "" || e.Event == "" || e.Timeout == 0 || e.URI == "" {
-			loggor.Error("Processing request: ID, Event, Timeout and URI are compulsory fields")
-			http.Error(w, "ID, Event, Timeout and URI are compulsory fields", 400)
+		if e.ID == "" || e.CallerName == "" || e.Timeout == 0 || e.URI == "" {
+			loggor.Error("Processing request: ID, CallerName, Timeout and URI are compulsory fields")
+			http.Error(w, "ID, CallerName, Timeout and URI are compulsory fields", 400)
 			return
 		}
 
 		e.StartedAt = time.Now().UTC()
 		e.Duration = time.Second * time.Duration(e.Timeout)
 		e.CalculatedExpiryTime = e.StartedAt.Add(e.Duration)
+
+		e.CombinedID = e.CallerName + "::" + e.ID
 
 		_, err = _collection.InsertOne(context.Background(), e)
 		if err != nil {
@@ -105,33 +108,35 @@ func process(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 400)
 			return
 		}
-		if e.ID == "" {
-			loggor.Error("Cancelling request: ID is a compulsory fields")
-			http.Error(w, "ID is a compulsory fields", 400)
+		if e.ID == "" || e.CallerName == "" {
+			loggor.Error("Cancelling request: ID and CallerName are compulsory fields")
+			http.Error(w, "ID and CallerName are compulsory fields", 400)
 			return
 		}
-		existingTimer, found := _m[e.ID]
-		loggor.Info("Cancelling event " + e.ID)
+		e.CombinedID = e.CallerName + "::" + e.ID
+
+		existingTimer, found := _m[e.CombinedID]
+		loggor.Info("Cancelling event " + e.CombinedID)
 
 		if !found {
-			loggor.Error("Cancelling event: Schedule not found for the ID specified")
-			http.Error(w, "Schedule not found for the ID specified", 400)
+			loggor.Error("Cancelling event: Schedule not found for the ID and CallerName specified")
+			http.Error(w, "Schedule not found for the ID and CallerName specified", 400)
 			return
 		}
 
 		stop := existingTimer.Stop()
 		if stop {
-			loggor.Info("Cancelling event: Callback " + e.ID + " cancelled")
-			delete(_m, e.ID)
+			loggor.Info("Cancelling event: Callback " + e.CombinedID + " cancelled")
+			delete(_m, e.CombinedID)
 		} else {
 			loggor.Error("Cancelling event: something went wrong when attmpting to stop scheduled callback")
 			http.Error(w, "Something went wrong when attmpting to stop scheduled callback", 400)
 			return
 		}
-		filter := bson.M{"id": e.ID}
+		filter := bson.M{"combinedid": e.CombinedID}
 		res, err := _collection.DeleteOne(context.Background(), filter)
 		if err != nil {
-			loggor.Error("Cancelling event: failed to delete entry from DB for " + e.ID + " - " + err.Error())
+			loggor.Error("Cancelling event: failed to delete entry from DB for " + e.CombinedID + " - " + err.Error())
 			http.Error(w, err.Error(), 400)
 			return
 		}
@@ -147,15 +152,15 @@ func process(w http.ResponseWriter, r *http.Request) {
 
 func schedule(e echo) {
 	timer := time.NewTimer(e.Duration)
-	_m[e.ID] = timer
+	_m[e.CombinedID] = timer
 	<-timer.C
 	go execCallback(e)
 }
 
 func execCallback(e echo) {
-	loggor.Info("Executing callback: " + e.ID)
+	loggor.Info("Executing callback: " + e.CombinedID)
 
-	filter := bson.M{"id": e.ID}
+	filter := bson.M{"combinedid": e.CombinedID}
 	res, err := _collection.DeleteOne(context.Background(), filter)
 	if err != nil {
 		loggor.Error("Executing callback: cannot delete entry from Mongo - " + err.Error())
@@ -259,20 +264,20 @@ func setupAndCheckStorage() {
 		loggor.Error("Setting up Mongo connection: cannot create calculatedexpirytime ttl index")
 		return
 	}
-	loggor.Info("Setting up Mongo connection: creating id unique index")
+	loggor.Info("Setting up Mongo connection: creating combinedid unique index")
 
 	unique := true
 	_, err = indexView.CreateOne(context.Background(), mongo.IndexModel{
-		Keys:    bson.M{"id": 1},
+		Keys:    bson.M{"combinedid": 1},
 		Options: &options.IndexOptions{Unique: &unique},
 	})
 	if err != nil {
-		loggor.Error("Setting up Mongo connection: cannot create id unique index")
+		loggor.Error("Setting up Mongo connection: cannot create combinedid unique index")
 		return
 	}
 	loggor.Info("Setting up Mongo connection: Done")
 
-	filter := bson.M{"hostname": _hostName}
+	filter := bson.M{}
 
 	loggor.Info("Recovering unprocessed callback schedules: starting")
 	cur, err := _collection.Find(context.Background(), filter)

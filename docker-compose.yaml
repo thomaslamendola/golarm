@@ -1,7 +1,8 @@
 version: '3'
 services:
   golarm:
-    image: thomaslamendola/golarm:latest
+    build:
+      context: .
     container_name: "golarm"
     ports:
       - "8787:8787"
@@ -10,18 +11,18 @@ services:
     depends_on:
       - mongo
     networks:
-      - "network1"
+      - "golarm-net"
   mongo:
     image: mongo
     ports:
       - "27017:27017"
     volumes:
-      - "mongodata:/data/db"
+      - "mongo-data:/data/db"
     networks:
-      - "network1"
+      - "golarm-net"
 
 volumes:
-   mongodata:
+   mongo-data:
 
 networks:
-   network1:
+   golarm-net:
